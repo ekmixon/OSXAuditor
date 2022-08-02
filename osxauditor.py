@@ -181,7 +181,7 @@ def HTMLLog(LogStr, TYPE):
             HTML_LOG_CONTENT += u"<i class='icon-file'></i> " + LogStr + u"<br>"
 
     elif TYPE == "INFO_RAW":
-            HTML_LOG_CONTENT += u"<pre>" + LogStr + u"</pre><br>"
+        HTML_LOG_CONTENT += f"<pre>{LogStr}</pre><br>"
 
     elif TYPE == "WARNING":
         HTML_LOG_CONTENT += u"<div class=\"alert alert-error\"><i class='icon-fire'></i> "+ LogStr + u"</div>"
@@ -209,7 +209,10 @@ def SyslogSetup(SyslogServer):
     try:
         Logger = logging.getLogger()
         Syslog = logging.handlers.SysLogHandler(address=(SyslogServer, SYSLOG_PORT))
-        Formatter = logging.Formatter('OS X Auditor: ' + HOSTNAME + ' %(levelname)s: %(message)s')
+        Formatter = logging.Formatter(
+            f'OS X Auditor: {HOSTNAME} %(levelname)s: %(message)s'
+        )
+
         Syslog.setFormatter(Formatter)
         Logger.addHandler(Syslog)
         SYSLOG_SERVER = True
@@ -223,30 +226,8 @@ def PrintAndLog(LogStr, TYPE):
     global HTML_LOG_FILE
     global SYSLOG_SERVER
 
-    if TYPE == 'INFO' or 'INFO_RAW':
-        print(u'[INFO] ' + LogStr)
-        logging.info(LogStr)
-
-    elif TYPE == 'ERROR':
-        print(u'[ERROR] ' + LogStr)
-        logging.error(LogStr)
-
-    elif TYPE == 'WARNING':
-        print(u'[WARNING] ' + LogStr)
-        logging.warning(LogStr)
-
-    elif TYPE == 'DEBUG':
-        print(u'[DEBUG] ' + LogStr)
-        logging.debug(LogStr)
-
-    elif TYPE == 'SECTION' or TYPE == 'SUBSECTION':
-        SectionTitle = u'\n#########################################################################################################\n'
-        SectionTitle += '#                                                                                                       #\n'
-        SectionTitle += '#         ' +LogStr+ ' '*(94-len(LogStr)) + '#\n'
-        SectionTitle += '#                                                                                                       #\n'
-        SectionTitle += '#########################################################################################################\n'
-        print(SectionTitle)
-        logging.info(u'\n' + SectionTitle)
+    print(f'[INFO] {LogStr}')
+    logging.info(LogStr)
 
     if HTML_LOG_FILE:
         HTMLLog(LogStr, TYPE)
@@ -255,7 +236,7 @@ def MHRLookup():
     ''' Perform of lookup in Team Cymru\'s MHR '''
 
     PrintAndLog(u'Team Cymru MHR lookup', 'SECTION')
-    PrintAndLog(u'Got %s hashes to verify' % len(HASHES), 'DEBUG')
+    PrintAndLog(f'Got {len(HASHES)} hashes to verify', 'DEBUG')
 
     Query = 'begin\r\n'
     for Hash in HASHES:
@@ -287,7 +268,7 @@ def VTLookup():
     ''' Perform of lookup in VirusTotal database '''
 
     PrintAndLog(u'Virustotal lookup', 'SECTION')
-    PrintAndLog(u'Got %s hashes to verify' % len(HASHES), 'DEBUG')
+    PrintAndLog(f'Got {len(HASHES)} hashes to verify', 'DEBUG')
 
     try:
         param = { 'resource': ','.join(HASHES), 'apikey': VT_API_KEY }
@@ -299,7 +280,12 @@ def VTLookup():
         if e.code == 401:
             PrintAndLog(u'Wrong VirusTotal key', 'ERROR')
         else:
-            PrintAndLog(u'VirusTotal error '+str(e.code)+' '+str(e.reason).decode('utf-8'), 'ERROR')
+            PrintAndLog(
+                f'VirusTotal error {str(e.code)} '
+                + str(e.reason).decode('utf-8'),
+                'ERROR',
+            )
+
 
     Ret = json.loads(data)
 
@@ -326,7 +312,7 @@ def LocalLookup(HashDBPath):
     global LOCAL_HASHES_DB
 
     PrintAndLog(u'Local hashes DB lookup', 'SECTION')
-    PrintAndLog(u'Got %s hashes to verify' % len(HASHES), 'DEBUG')
+    PrintAndLog(f'Got {len(HASHES)} hashes to verify', 'DEBUG')
 
     with open(HashDBPath, 'r') as f:
         Data = f.readlines()
@@ -335,11 +321,15 @@ def LocalLookup(HashDBPath):
                 Line = Line.split(' ')
                 LOCAL_HASHES_DB[Line[0]] = Line[1]
 
-    PrintAndLog(str(len(LOCAL_HASHES_DB)) + u' hashes loaded from the local hashes database', 'DEBUG')
+    PrintAndLog(
+        f'{len(LOCAL_HASHES_DB)} hashes loaded from the local hashes database',
+        'DEBUG',
+    )
+
 
     for Hash in HASHES:
         if Hash in LOCAL_HASHES_DB:
-            PrintAndLog(Hash + u' '+ LOCAL_HASHES_DB[Hash], 'WARNING')
+            PrintAndLog(f'{Hash} {LOCAL_HASHES_DB[Hash]}', 'WARNING')
 
 def BigFileMd5(FilePath):
     ''' Return the md5 hash of a big file '''
@@ -415,7 +405,7 @@ def ParseQuarantines():
                 JointLSQuarantineEvent = u''
                 for Q in LSQuarantineEvent:
                     decoded = str(Q).decode('UTF-8', 'ignore')
-                    JointLSQuarantineEvent += u';' + decoded
+                    JointLSQuarantineEvent += f';{decoded}'
                 PrintAndLog(JointLSQuarantineEvent[1:] + u'\n'.decode('utf-8'), 'INFO')
             DbConnection.close()
 
@@ -429,16 +419,23 @@ def ParseStartupItems(StartupItemsPath):
         StartupItemsPlistPath = os.path.join(StartupItemsPath, StartupItems, 'StartupParameters.plist')
 
         PrintAndLog(StartupItemsPlistPath, 'DEBUG')
-        StartupItemsPlist = UniversalReadPlist(StartupItemsPlistPath)
-
-        if StartupItemsPlist:
+        if StartupItemsPlist := UniversalReadPlist(StartupItemsPlistPath):
             if 'Provides' in StartupItemsPlist:
                 FilePath = os.path.join(StartupItemsPath, StartupItems, StartupItemsPlist['Provides'][0])
-                Md5 = BigFileMd5(FilePath)
-                if Md5:
+                if Md5 := BigFileMd5(FilePath):
                     if Md5 not in HASHES:
                         HASHES.append(Md5)
-                    PrintAndLog(Md5 + u' '+ FilePath.decode('utf-8') + u' - ' + time.ctime(os.path.getmtime(FilePath)) + u' - ' + time.ctime(os.path.getctime(FilePath))+ u'\n', 'INFO')
+                    PrintAndLog(
+                        f'{Md5} '
+                        + FilePath.decode('utf-8')
+                        + u' - '
+                        + time.ctime(os.path.getmtime(FilePath))
+                        + u' - '
+                        + time.ctime(os.path.getctime(FilePath))
+                        + u'\n',
+                        'INFO',
+                    )
+
         NbStartupItems += 1
     if NbStartupItems == 0:
         PrintAndLog(StartupItemsPath.decode('utf-8') + u' is empty', 'INFO')
@@ -454,27 +451,45 @@ def ParseLaunchAgents(AgentsPath):
         LaunchAgentPlistpath = os.path.join(AgentsPath, LaunchAgent)
 
         PrintAndLog(LaunchAgentPlistpath, 'DEBUG')
-        LaunchAgentPlist = UniversalReadPlist(LaunchAgentPlistpath)
-
-        if LaunchAgentPlist:
+        if LaunchAgentPlist := UniversalReadPlist(LaunchAgentPlistpath):
             if 'Program' in LaunchAgentPlist and 'Label' in LaunchAgentPlist:
                 FilePath = LaunchAgentPlist['Program']
-                Md5 = BigFileMd5(FilePath)
-                if Md5:
+                if Md5 := BigFileMd5(FilePath):
                     if Md5 not in HASHES:
                         HASHES.append(Md5)
-                    PrintAndLog(Md5 + u' '+ FilePath.decode('utf-8') + u' - ' + time.ctime(os.path.getmtime(FilePath)) + u' - ' + time.ctime(os.path.getctime(FilePath)) + u'\n', 'INFO')
+                    PrintAndLog(
+                        f'{Md5} '
+                        + FilePath.decode('utf-8')
+                        + u' - '
+                        + time.ctime(os.path.getmtime(FilePath))
+                        + u' - '
+                        + time.ctime(os.path.getctime(FilePath))
+                        + u'\n',
+                        'INFO',
+                    )
+
                 continue
             if 'ProgramArguments' in LaunchAgentPlist and 'Label' in LaunchAgentPlist:
                 FilePath = LaunchAgentPlist['ProgramArguments'][0]
-                Md5 = BigFileMd5(FilePath)
-                if Md5:
+                if Md5 := BigFileMd5(FilePath):
                     if Md5 not in HASHES:
                         HASHES.append(Md5)
-                    PrintAndLog(Md5 + u' '+ FilePath.decode('utf-8') + u' - ' + time.ctime(os.path.getctime(FilePath)) + u' - ' + time.ctime(os.path.getmtime(FilePath)) + u'\n', 'INFO')
-                if len(LaunchAgentPlist['ProgramArguments']) >= 3:
-                    if any(x in LaunchAgentPlist['ProgramArguments'][2] for x in SuspiciousPlist):
-                        PrintAndLog(LaunchAgentPlist['ProgramArguments'][2].decode('utf-8')+ u' in ' + LaunchAgentPlistpath.decode('utf-8') + u' looks suspicious', 'WARNING')
+                    PrintAndLog(
+                        f'{Md5} '
+                        + FilePath.decode('utf-8')
+                        + u' - '
+                        + time.ctime(os.path.getctime(FilePath))
+                        + u' - '
+                        + time.ctime(os.path.getmtime(FilePath))
+                        + u'\n',
+                        'INFO',
+                    )
+
+                if len(LaunchAgentPlist['ProgramArguments']) >= 3 and any(
+                    x in LaunchAgentPlist['ProgramArguments'][2]
+                    for x in SuspiciousPlist
+                ):
+                    PrintAndLog(LaunchAgentPlist['ProgramArguments'][2].decode('utf-8')+ u' in ' + LaunchAgentPlistpath.decode('utf-8') + u' looks suspicious', 'WARNING')
         NbLaunchAgents += 1
 
     if NbLaunchAgents == 0:
@@ -538,11 +553,20 @@ def HashDir(Title, Path):
     for Root, Dirs, Files in os.walk(Path):
         for File in Files:
             FilePath = os.path.join(Root, File)
-            Md5 = BigFileMd5(FilePath)
-            if Md5:
+            if Md5 := BigFileMd5(FilePath):
                 if Md5 not in HASHES:
                     HASHES.append(Md5)
-                PrintAndLog(Md5 +' '+ FilePath.decode('utf-8') + u' - ' + time.ctime(os.path.getmtime(FilePath)) + u' - ' + time.ctime(os.path.getctime(FilePath)) + u'\n', 'INFO')
+                PrintAndLog(
+                    f'{Md5} '
+                    + FilePath.decode('utf-8')
+                    + u' - '
+                    + time.ctime(os.path.getmtime(FilePath))
+                    + u' - '
+                    + time.ctime(os.path.getctime(FilePath))
+                    + u'\n',
+                    'INFO',
+                )
+
             NbFiles += 1
 
     if NbFiles == 0:
@@ -558,17 +582,17 @@ def ParseDownloads():
             if os.path.isdir(DlUserPath):
                 HashDir(User + u'\'s downloads', DlUserPath)
             else:
-                PrintAndLog(DlUserPath + u' does not exist', 'DEBUG')
+                PrintAndLog(f'{DlUserPath} does not exist', 'DEBUG')
             OldEmailUserPath = os.path.join(ROOT_PATH, 'Users', User, 'Library/Mail Downloads/')
             if os.path.isdir(OldEmailUserPath):
                 HashDir(User + u'\'s old email downloads', OldEmailUserPath)
             else:
-                PrintAndLog(OldEmailUserPath + u' does not exist', 'DEBUG')
+                PrintAndLog(f'{OldEmailUserPath} does not exist', 'DEBUG')
             EmailUserPath = os.path.join(ROOT_PATH, 'Users', User, 'Library/Containers/com.apple.mail/Data/Library/Mail Downloads')
             if os.path.isdir(EmailUserPath):
                 HashDir(User + u'\'s email downloads', EmailUserPath)
             else:
-                PrintAndLog(EmailUserPath + u' does not exist', 'DEBUG')
+                PrintAndLog(f'{EmailUserPath} does not exist', 'DEBUG')
 
 def DumpSQLiteDb(SQLiteDbPath):
     ''' Dump a SQLite database file '''
@@ -582,7 +606,7 @@ def DumpSQLiteDb(SQLiteDbPath):
             Tables =  DbCursor.fetchall()
             for Table in Tables:
                 PrintAndLog(u'Table ' + Table[2].decode('utf-8'), 'DEBUG')
-                DbCursor.execute("SELECT * from " + Table[2])
+                DbCursor.execute(f"SELECT * from {Table[2]}")
                 Rows = DbCursor.fetchall()
                 if len(Rows) == 0:
                     PrintAndLog(u'Table ' + Table[2].decode('utf-8') + u' is empty', 'INFO')
@@ -809,41 +833,48 @@ def ParsePackagesDir(PackagesDirPath):
     NbPackages = 0
 
     for PackagePath in os.listdir(PackagesDirPath):
-        if PackagePath not in IgnoredFiles:
-            if PackagePath[-4:] == '.app' or PackagePath[-5:] == '.kext':
-                if os.path.isfile(os.path.join(PackagesDirPath, PackagePath, plistfile)):
-                    PackagePlistPath = os.path.join(PackagesDirPath, PackagePath, plistfile)
-                    CFBundleExecutablepath = ''
-                elif os.path.isfile(os.path.join(PackagesDirPath, PackagePath, 'Contents', plistfile)):
-                    PackagePlistPath = os.path.join(PackagesDirPath, PackagePath, 'Contents', plistfile)
-                    CFBundleExecutablepath = 'Contents/MacOS/'
-                else:
-                    PrintAndLog(os.path.join(PackagesDirPath, PackagePath).decode('utf-8'), 'DEBUG')
-                    PrintAndLog(u'Cannot find any Info.plist in ' + PackagePath.decode('utf-8'), 'ERROR')
-                    continue
+        if PackagePath in IgnoredFiles:
+            continue
 
+        if PackagePath[-4:] == '.app' or PackagePath[-5:] == '.kext':
+            if os.path.isfile(os.path.join(PackagesDirPath, PackagePath, plistfile)):
+                PackagePlistPath = os.path.join(PackagesDirPath, PackagePath, plistfile)
+                CFBundleExecutablepath = ''
+            elif os.path.isfile(os.path.join(PackagesDirPath, PackagePath, 'Contents', plistfile)):
+                PackagePlistPath = os.path.join(PackagesDirPath, PackagePath, 'Contents', plistfile)
+                CFBundleExecutablepath = 'Contents/MacOS/'
+            else:
                 PrintAndLog(os.path.join(PackagesDirPath, PackagePath).decode('utf-8'), 'DEBUG')
-                PackagePlist = UniversalReadPlist(PackagePlistPath)
+                PrintAndLog(u'Cannot find any Info.plist in ' + PackagePath.decode('utf-8'), 'ERROR')
+                continue
 
-                if PackagePlist:
-                    if 'CFBundleExecutable' in PackagePlist:
-                        if PackagePlist['CFBundleExecutable'] != '':
-                            FilePath = os.path.join(PackagesDirPath, PackagePath, CFBundleExecutablepath, PackagePlist['CFBundleExecutable'])
-                            Md5 = BigFileMd5(FilePath)
-                            if Md5:
-                                if Md5 not in HASHES:
-                                    HASHES.append(Md5)
-                                PrintAndLog(Md5 + u' '+ FilePath.decode('utf-8') + u' - ' + time.ctime(os.path.getmtime(FilePath)) + u' - ' + time.ctime(os.path.getctime(FilePath)) + u'\n', 'INFO')
-                        else:
-                            PrintAndLog(u'The CFBundleExecutable key in ' + PackagePlistPath.decode('utf-8') + u' is empty\n', 'ERROR')
+            PrintAndLog(os.path.join(PackagesDirPath, PackagePath).decode('utf-8'), 'DEBUG')
+            if PackagePlist := UniversalReadPlist(PackagePlistPath):
+                if 'CFBundleExecutable' in PackagePlist:
+                    if PackagePlist['CFBundleExecutable'] != '':
+                        FilePath = os.path.join(PackagesDirPath, PackagePath, CFBundleExecutablepath, PackagePlist['CFBundleExecutable'])
+                        if Md5 := BigFileMd5(FilePath):
+                            if Md5 not in HASHES:
+                                HASHES.append(Md5)
+                            PrintAndLog(
+                                f'{Md5} '
+                                + FilePath.decode('utf-8')
+                                + u' - '
+                                + time.ctime(os.path.getmtime(FilePath))
+                                + u' - '
+                                + time.ctime(os.path.getctime(FilePath))
+                                + u'\n',
+                                'INFO',
+                            )
+
                     else:
-                        PrintAndLog(u'Cannot find the CFBundleExecutable key in ' + PackagePlistPath.decode('utf-8') + u'\n', 'ERROR')
-            NbPackages += 1
+                        PrintAndLog(u'The CFBundleExecutable key in ' + PackagePlistPath.decode('utf-8') + u' is empty\n', 'ERROR')
+                else:
+                    PrintAndLog(u'Cannot find the CFBundleExecutable key in ' + PackagePlistPath.decode('utf-8') + u'\n', 'ERROR')
+        NbPackages += 1
 
-            if os.path.isdir(os.path.join(PackagesDirPath, PackagePath)) and not os.path.islink(os.path.join(PackagesDirPath, PackagePath)):
-                ParsePackagesDir(os.path.join(PackagesDirPath, PackagePath))
-
-        else: continue
+        if os.path.isdir(os.path.join(PackagesDirPath, PackagePath)) and not os.path.islink(os.path.join(PackagesDirPath, PackagePath)):
+            ParsePackagesDir(os.path.join(PackagesDirPath, PackagePath))
 
     if NbPackages == 0:
         PrintAndLog(PackagesDirPath.decode('utf-8') + u' is empty (no package found)', 'INFO')
@@ -876,11 +907,17 @@ def AggregateLogs(ZipLogsFile):
     ''' Walk in the different log directories to add all logs to a zipball '''
 
     PrintAndLog(u'Log files aggregation', 'SECTION')
-    
+
     if not os.path.isdir(ZipLogsFile):
         os.makedirs(ZipLogsFile)
 
-    ZipLogsFilePath = os.path.join(ZipLogsFile, 'OSXAuditor_report_' + HOSTNAME + '_' + time.strftime('%Y%m%d-%H%M%S', time.gmtime()) + '.zip')
+    ZipLogsFilePath = os.path.join(
+        ZipLogsFile,
+        f'OSXAuditor_report_{HOSTNAME}_'
+        + time.strftime('%Y%m%d-%H%M%S', time.gmtime())
+        + '.zip',
+    )
+
     PrintAndLog(u'All log files are aggregated in ' + ZipLogsFilePath.decode('utf-8'), 'DEBUG')
 
     try:
@@ -907,7 +944,7 @@ def GeomenaApiLocation(Ssid):
 
     for i in Ssid:
         if len(i) == 1:
-            i = '0'+i
+            i = f'0{i}'
         NormalizedSsid += i
 
     PrintAndLog(u'Geomena query for ' + ''.join(NormalizedSsid), 'DEBUG')
@@ -916,14 +953,22 @@ def GeomenaApiLocation(Ssid):
         F = urllib2.urlopen(GEOMENA_API_HOST + NormalizedSsid)
         Data = F.read()
     except urllib2.HTTPError as e:
-        PrintAndLog(u'Geomena API error ' + str(e.code) + ' ' + str(e.reason).decode('utf-8'), 'ERROR')
+        PrintAndLog(
+            f'Geomena API error {str(e.code)} '
+            + str(e.reason).decode('utf-8'),
+            'ERROR',
+        )
 
-    M = re.match('.+\sLatitude:\s([-\d\.]{1,19})\s.+\sLongitude:\s([-\d\.]{1,19})\s.+', Data, re.DOTALL)
-    if M:
-        Latitude = M.group(1)
-        Longitude = M.group(2)
 
-    return u'Latitude: ' + Latitude + u' Longitude: ' + Longitude
+    if M := re.match(
+        '.+\sLatitude:\s([-\d\.]{1,19})\s.+\sLongitude:\s([-\d\.]{1,19})\s.+',
+        Data,
+        re.DOTALL,
+    ):
+        Latitude = M[1]
+        Longitude = M[2]
+
+    return f'Latitude: {Latitude} Longitude: {Longitude}'
 
 def ParseAirportPrefs():
     ''' Parse Airport preferences and try to extract geolocation information '''
@@ -966,17 +1011,13 @@ def ParseMailAppAccount(MailAccountPlistPath):
     ''' Parse a Mail Account plist '''
 
     MailAccountPlist = False
-    NbMailAccounts = 0
-    NbSmtpAccounts = 0
-
     PrintAndLog(MailAccountPlistPath, 'DEBUG')
 
-    MailAccountPlist = UniversalReadPlist(MailAccountPlistPath)
-
-    if MailAccountPlist:
+    if MailAccountPlist := UniversalReadPlist(MailAccountPlistPath):
         PrintAndLog(u'Email accounts', 'SUBSECTION')
         if 'MailAccounts' in MailAccountPlist:
             MailAccounts = MailAccountPlist['MailAccounts']
+            NbMailAccounts = 0
             for MailAccount in MailAccounts:
                 MAccountPref = ''
                 if 'AccountName' in MailAccount:
@@ -989,7 +1030,7 @@ def ParseMailAppAccount(MailAccountPlistPath):
                     if 'SMTPIdentifier' in MailAccount: MAccountPref += 'SMTPIdentifier: ' + MailAccount['SMTPIdentifier']  + ' - '
                     if 'EmailAddresses' in MailAccount:
                         for EmailAddresse in MailAccount['EmailAddresses']:
-                            MAccountPref += 'EmailAddresse: ' + EmailAddresse + ' - '
+                            MAccountPref += f'EmailAddresse: {EmailAddresse} - '
                     PrintAndLog(MAccountPref.decode('utf-8'), 'INFO')
                 NbMailAccounts += 1
             if NbMailAccounts == 0:
@@ -998,6 +1039,8 @@ def ParseMailAppAccount(MailAccountPlistPath):
         PrintAndLog(u'SMTP accounts', 'SUBSECTION')
         if 'DeliveryAccounts' in MailAccountPlist:
             DeliveryAccounts = MailAccountPlist['DeliveryAccounts']
+            NbSmtpAccounts = 0
+
             for DeliveryAccount in DeliveryAccounts:
                 DAccountPref = ''
                 if 'AccountName' in DeliveryAccount:
@@ -1017,16 +1060,16 @@ def ParseUsersRecentItems(RecentItemsAccountPlistPath):
 
     PrintAndLog(RecentItemsAccountPlistPath, 'DEBUG')
 
-    RecentItemsAccountPlist = UniversalReadPlist(RecentItemsAccountPlistPath)
-
-    if RecentItemsAccountPlist:
+    if RecentItemsAccountPlist := UniversalReadPlist(
+        RecentItemsAccountPlistPath
+    ):
         if 'RecentServers' in RecentItemsAccountPlist:
             RecentServersList = ''
             RecentServers = RecentItemsAccountPlist['RecentServers']['CustomListItems']
             if len(RecentServers) != 0:
                 for RecentServer in RecentServers:
                     RecentServersList += RecentServer['Name'] + ' -> ' #+ RecentServer['URL']
-                PrintAndLog('Recent servers : ' + RecentServersList, 'INFO')
+                PrintAndLog(f'Recent servers : {RecentServersList}', 'INFO')
             else:
                 PrintAndLog('No recent servers', 'INFO')
 
@@ -1036,7 +1079,7 @@ def ParseUsersRecentItems(RecentItemsAccountPlistPath):
             if len(RecentDocuments) != 0:
                 for RecentDocument in RecentDocuments:
                     RecentDocumentsList += RecentDocument['Name']
-                PrintAndLog('Recent documents : ' + RecentDocumentsList, 'INFO')
+                PrintAndLog(f'Recent documents : {RecentDocumentsList}', 'INFO')
             else:
                 PrintAndLog('No recent documents', 'INFO')
 
@@ -1046,27 +1089,26 @@ def ParseUsersRecentItems(RecentItemsAccountPlistPath):
             if len(RecentApplications) != 0:
                 for RecentApplication in RecentApplications:
                     RecentApplicationsList += RecentApplication['Name']
-                PrintAndLog('Recent Applications : ' + RecentApplicationsList, 'INFO')
+                PrintAndLog(f'Recent Applications : {RecentApplicationsList}', 'INFO')
             else:
                 PrintAndLog('No recent applications', 'INFO')
 
         if 'Hosts' in RecentItemsAccountPlist:
-            RecentHostsList = ''
             RecentHosts = RecentItemsAccountPlist['Hosts']['CustomListItems']
             if len(RecentHosts) != 0:
-                for RecentHost in RecentHosts:
-                    RecentHostsList += RecentHost['Name'] + ' -> ' + RecentHost['URL'] + ' | '
-                PrintAndLog('Recent hosts : ' + RecentHostsList, 'INFO')
+                RecentHostsList = ''.join(
+                    RecentHost['Name'] + ' -> ' + RecentHost['URL'] + ' | '
+                    for RecentHost in RecentHosts
+                )
+
+                PrintAndLog(f'Recent hosts : {RecentHostsList}', 'INFO')
             else:
                 PrintAndLog('No recent hosts', 'INFO')
 
 def StringFromDic(dic):
     ''' Return the content of a dictionary '''
 
-    Content = u''
-    for stuff in dic:
-        Content += stuff + u'\n'
-    return Content
+    return u''.join(stuff + u'\n' for stuff in dic)
 
 
 def ParseSysUsers():
@@ -1080,10 +1122,8 @@ def ParseSysUsers():
             SysUserPlistPath = os.path.join(ROOT_PATH, 'private/var/db/dslocal/nodes/Default/users', User)
             PrintAndLog(User[:-6] + u'\'s system account details', 'SUBSECTION')
 
-            SysUserPlist = UniversalReadPlist(SysUserPlistPath)
-
-            UserDetails =''
-            if SysUserPlist:
+            if SysUserPlist := UniversalReadPlist(SysUserPlistPath):
+                UserDetails =''
                 if 'name' in SysUserPlist:
                     Names = u''
                     for Name in SysUserPlist['name']:
@@ -1091,7 +1131,7 @@ def ParseSysUsers():
                         if Name in ADMINS:
                             Names += u' (is Admin)'
                         Names += u'\n'
-                    UserDetails += u'Name(s): ' + Names
+                    UserDetails += f'Name(s): {Names}'
 
                 if 'realname' in SysUserPlist:
                     UserDetails += u'Real Name(s): ' + StringFromDic(SysUserPlist['realname'])
@@ -1115,7 +1155,7 @@ def ParseSysUsers():
                         if Generateduid in ADMINS:
                             Generateduids += u' (is Admin)'
                         Generateduids += u'\n'
-                    UserDetails += u'generated UID(s): ' + Generateduids
+                    UserDetails += f'generated UID(s): {Generateduids}'
 
                 if 'LinkedIdentity' in SysUserPlist:
                     UserDetails += u'LinkedIdentities have been found. Extraction of LinkedIdentities is not implemented yet.'
@@ -1130,9 +1170,7 @@ def ParseSysAdminsGroup():
     PrintAndLog(u'System\'s admins', 'SUBSECTION')
 
     SysAdminsPlistPath = os.path.join(ROOT_PATH, 'private/var/db/dslocal/nodes/Default/groups/admin.plist')
-    SysAdminsPlist = UniversalReadPlist(SysAdminsPlistPath)
-
-    if SysAdminsPlist:
+    if SysAdminsPlist := UniversalReadPlist(SysAdminsPlistPath):
         if 'groupmembers' in SysAdminsPlist:
             for Admin in SysAdminsPlist['groupmembers']:
                 ADMINS.append(Admin)
@@ -1141,9 +1179,7 @@ def ParseSysAdminsGroup():
             for Admin in SysAdminsPlist['users']:
                 ADMINS.append(Admin)
 
-        Admins = u''
-        for Admin in ADMINS:
-            Admins += Admin + u'\n'
+        Admins = u''.join(Admin + u'\n' for Admin in ADMINS)
         PrintAndLog(Admins, 'INFO_RAW')
 
 def ParseUsersAccounts():
@@ -1159,7 +1195,7 @@ def ParseUsersAccounts():
             if os.path.isfile(UsersAccountPath):
                 DumpSQLiteDb(UsersAccountPath)
             else:
-                PrintAndLog(User + u' has no social account', 'INFO')
+                PrintAndLog(f'{User} has no social account', 'INFO')
 
     PrintAndLog(u'Users\' Mail.app accounts', 'SUBSECTION')
     for User in os.listdir(os.path.join(ROOT_PATH, 'Users')):
@@ -1169,7 +1205,7 @@ def ParseUsersAccounts():
             if os.path.isfile(MailAccountPlistPath):
                 ParseMailAppAccount(MailAccountPlistPath)
             else:
-                PrintAndLog(User + u' has no Mail.app account', 'INFO')
+                PrintAndLog(f'{User} has no Mail.app account', 'INFO')
 
     PrintAndLog(u'Users\' recent items', 'SUBSECTION')
     for User in os.listdir(os.path.join(ROOT_PATH, 'Users')):
@@ -1179,7 +1215,7 @@ def ParseUsersAccounts():
             if os.path.isfile(RecentItemsAccountPlistPath):
                 ParseUsersRecentItems(RecentItemsAccountPlistPath)
             else:
-                PrintAndLog(User + u' has no recent items', 'INFO')
+                PrintAndLog(f'{User} has no recent items', 'INFO')
 
     ParseSysAdminsGroup()
     ParseSysUsers()
@@ -1198,9 +1234,9 @@ def GetAuditedSystemVersion():
     SysVersion = 'Unknown system version'
     SystemVersionPlist = False
 
-    SystemVersionPlist = UniversalReadPlist('/System/Library/CoreServices/SystemVersion.plist')
-
-    if SystemVersionPlist:
+    if SystemVersionPlist := UniversalReadPlist(
+        '/System/Library/CoreServices/SystemVersion.plist'
+    ):
         if 'ProductName' in SystemVersionPlist: SysVersion = SystemVersionPlist['ProductName']
         if 'ProductVersion' in SystemVersionPlist: SysVersion += ' ' + SystemVersionPlist['ProductVersion']
         if 'ProductBuildVersion' in SystemVersionPlist: SysVersion += ' build ' + SystemVersionPlist['ProductBuildVersion']
@@ -1208,12 +1244,12 @@ def GetAuditedSystemVersion():
         ProductVersion = SystemVersionPlist['ProductVersion'].split('.')
 
         OSX_VERSION = {
-			'ProductBuildVersion': SystemVersionPlist['ProductBuildVersion'],
-			'ProductVersion': SystemVersionPlist['ProductVersion'],
-			'MajorVersion': int(ProductVersion[0]),
-			'MinorVersion': int(ProductVersion[1]),
-			'PatchVersion': int(ProductVersion[2] if len(ProductVersion) > 2 else 0)
-		}
+        	'ProductBuildVersion': SystemVersionPlist['ProductBuildVersion'],
+        	'ProductVersion': SystemVersionPlist['ProductVersion'],
+        	'MajorVersion': int(ProductVersion[0]),
+        	'MinorVersion': int(ProductVersion[1]),
+        	'PatchVersion': int(ProductVersion[2] if len(ProductVersion) > 2 else 0)
+        }
 
     else:
         PrintAndLog(u'Cannot determine the system version', 'ERROR')
@@ -1231,7 +1267,7 @@ def GetAuditedSystemTimezone():
     except Exception as e:
         PrintAndLog(u'Cannot read the timezone' + str(e.args).decode('utf-8'), 'ERROR')
 
-    return Timezone[-2] + '/' + Timezone[-1]
+    return f'{Timezone[-2]}/{Timezone[-1]}'
 
 
 def ParseSystemlogFile(SystemLogPath, Year, Bzip2ed=False, Gziped=False):
